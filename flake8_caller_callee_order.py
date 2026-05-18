@@ -50,7 +50,7 @@ class FunctionCallCollector(ast.NodeVisitor):
 
 class CallerCalleeOrderChecker:
     name = "flake8-caller-callee-order"
-    version = "0.1.0"
+    version = "0.1.1"
     order = CallerCalleeOrder.CALLEE_BEFORE_CALLER
 
     @classmethod

@@ -1,6 +1,6 @@
 [project]
 name = "flake8-caller-callee-order"
-version = "0.1.0"
+version = "0.1.1"
 description = "Flake8 plugin that checks top-level caller/callee definition order"
 readme = "README.md"
 requires-python = ">=3.12"
