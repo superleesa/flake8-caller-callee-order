@@ -39,6 +39,7 @@ caller-callee-order = caller-before-callee
 ## Development
 
 ```sh
+uv run flake8 .
 uv run pytest
 uv run ruff check
 uv run ruff format

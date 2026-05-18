@@ -10,6 +10,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "flake8-pyproject>=1.2.4",
     "mypy>=1.18.0",
     "pytest>=8.0.0",
     "ruff>=0.14.0",
@@ -27,6 +28,16 @@ CCO = "flake8_caller_callee_order:CallerCalleeOrderChecker"
 
 [tool.ruff]
 target-version = "py312"
+
+[tool.flake8]
+select = ["CCO"]
+exclude = [
+    ".git",
+    ".venv",
+    "dist",
+    "tests/fixtures",
+]
+caller-callee-order = "callee-before-caller"
 
 [tool.mypy]
 python_version = "3.12"
