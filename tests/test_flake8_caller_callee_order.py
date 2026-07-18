@@ -86,7 +86,10 @@ def helper():
         (
             3,
             4,
-            "CCO001 `main` calls `helper`, but `helper` is defined later at line 6",
+            (
+                "CCO001 `main` references `helper`, but `helper` is "
+                "defined later at line 6"
+            ),
             CallerCalleeOrderChecker,
         )
     ]
@@ -109,7 +112,10 @@ def main():
         (
             7,
             4,
-            "CCO001 `main` calls `helper`, but `helper` is defined earlier at line 2",
+            (
+                "CCO001 `main` references `helper`, but `helper` is "
+                "defined earlier at line 2"
+            ),
             CallerCalleeOrderChecker,
         )
     ]
@@ -121,8 +127,8 @@ def test_mixed_fixture_reports_each_later_defined_callee(tmp_path: Path) -> None
     assert result.returncode == 1
     assert f"{FIXTURES / 'mixed.py'}:2:5: CCO001" in result.stdout
     assert f"{FIXTURES / 'mixed.py'}:3:5: CCO001" in result.stdout
-    assert "`a` calls `b`" in result.stdout
-    assert "`a` calls `c`" in result.stdout
+    assert "`a` references `b`" in result.stdout
+    assert "`a` references `c`" in result.stdout
     assert result.stderr == ""
 
 
@@ -142,3 +148,109 @@ caller-callee-order = caller-before-callee
     assert result.returncode == 0
     assert result.stdout == ""
     assert result.stderr == ""
+
+
+def test_checker_reports_later_defined_class_reference() -> None:
+    results = run_checker(
+        """
+def main():
+    return User()
+
+
+class User:
+    pass
+"""
+    )
+
+    assert results == [
+        (
+            3,
+            11,
+            "CCO001 `main` references `User`, but `User` is defined later at line 6",
+            CallerCalleeOrderChecker,
+        )
+    ]
+
+
+def test_checker_reports_later_defined_assignment_reference() -> None:
+    results = run_checker(
+        """
+VALUE = OTHER
+OTHER = 1
+"""
+    )
+
+    assert results == [
+        (
+            2,
+            8,
+            "CCO001 `VALUE` references `OTHER`, but `OTHER` is defined later at line 3",
+            CallerCalleeOrderChecker,
+        )
+    ]
+
+
+def test_checker_reports_later_defined_annotated_assignment_reference() -> None:
+    results = run_checker(
+        """
+VALUE: int = OTHER
+OTHER = 1
+"""
+    )
+
+    assert results == [
+        (
+            2,
+            13,
+            "CCO001 `VALUE` references `OTHER`, but `OTHER` is defined later at line 3",
+            CallerCalleeOrderChecker,
+        )
+    ]
+
+
+def test_checker_reports_later_defined_import_reference() -> None:
+    results = run_checker(
+        """
+def main():
+    return Path("file.txt")
+
+
+from pathlib import Path
+"""
+    )
+
+    assert results == [
+        (
+            3,
+            11,
+            "CCO001 `main` references `Path`, but `Path` is defined later at line 6",
+            CallerCalleeOrderChecker,
+        )
+    ]
+
+
+def test_checker_allows_class_body_references_to_later_class_members() -> None:
+    results = run_checker(
+        """
+class Config:
+    value = default
+    default = 1
+"""
+    )
+
+    assert results == []
+
+
+def test_checker_allows_class_method_references_to_later_class_members() -> None:
+    results = run_checker(
+        """
+class Service:
+    def run(self):
+        helper()
+
+    def helper(self):
+        pass
+"""
+    )
+
+    assert results == []
