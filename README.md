@@ -53,6 +53,9 @@ positives against outer definitions.
 Lambdas and comprehensions are skipped conservatively until their binding scopes
 are modeled.
 
+See [DESIGN.md](DESIGN.md) for the resolver design and intentionally deferred
+edge cases.
+
 To require callers before their callees instead, configure Flake8 with:
 
 ```ini
