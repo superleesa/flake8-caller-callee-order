@@ -24,7 +24,8 @@ CCO001 `main` references `helper`, but `helper` is defined later at line 5
 
 By default, `caller-callee-order = callee-before-caller`, and `CCO001` is
 emitted when a local definition references another local definition that is
-defined later in the same module scope.
+defined later in the same module scope. It also checks method references within
+class scopes by method name.
 
 Supported definitions are:
 
@@ -35,10 +36,10 @@ Supported definitions are:
 - annotated assignments like `name: type = value`
 - imports like `import module` and `from module import name`
 
-For now it only checks simple local references like `helper()` or `CONFIG`;
-method and attribute references like `self.helper()` or `module.helper()` are
-ignored. Definitions inside class bodies or function bodies are not ordered
-yet.
+For now it checks simple local references like `helper()` or `CONFIG`, plus
+method references like `self.helper()` and `cls.helper()` inside classes. Other
+attribute references like `module.helper()` are ignored. Class attributes and
+definitions inside function bodies are not ordered yet.
 
 To require callers before their callees instead, configure Flake8 with:
 

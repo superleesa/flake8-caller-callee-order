@@ -241,16 +241,53 @@ class Config:
     assert results == []
 
 
-def test_checker_allows_class_method_references_to_later_class_members() -> None:
+def test_checker_reports_later_defined_class_method_reference() -> None:
     results = run_checker(
         """
 class Service:
     def run(self):
-        helper()
+        self.helper()
 
     def helper(self):
         pass
 """
     )
 
-    assert results == []
+    assert results == [
+        (
+            4,
+            8,
+            (
+                "CCO001 `run` references `helper`, but `helper` is "
+                "defined later at line 6"
+            ),
+            CallerCalleeOrderChecker,
+        )
+    ]
+
+
+def test_checker_reports_later_defined_class_method_reference_from_cls() -> None:
+    results = run_checker(
+        """
+class Service:
+    @classmethod
+    def run(cls):
+        cls.helper()
+
+    @classmethod
+    def helper(cls):
+        pass
+"""
+    )
+
+    assert results == [
+        (
+            5,
+            8,
+            (
+                "CCO001 `run` references `helper`, but `helper` is "
+                "defined later at line 8"
+            ),
+            CallerCalleeOrderChecker,
+        )
+    ]

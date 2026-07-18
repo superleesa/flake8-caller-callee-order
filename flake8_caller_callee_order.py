@@ -32,9 +32,25 @@ class NameReference(NamedTuple):
 
 
 class NameReferenceCollector(ast.NodeVisitor):
-    def __init__(self, local_names: set[str]) -> None:
+    def __init__(
+        self,
+        local_names: set[str],
+        *,
+        attribute_base_names: set[str] | None = None,
+    ) -> None:
         self.local_names = local_names
+        self.attribute_base_names = attribute_base_names or set()
         self.references: set[NameReference] = set()
+
+    def _visit_function_signature(
+        self,
+        node: ast.FunctionDef | ast.AsyncFunctionDef,
+    ) -> None:
+        for decorator in node.decorator_list:
+            self.visit(decorator)
+        self.visit(node.args)
+        if node.returns is not None:
+            self.visit(node.returns)
 
     def visit_Name(self, node: ast.Name) -> None:
         # Handles simple local references such as foo or foo(...). Attribute
@@ -47,6 +63,23 @@ class NameReferenceCollector(ast.NodeVisitor):
                     col_offset=node.col_offset,
                 )
             )
+
+    def visit_Attribute(self, node: ast.Attribute) -> None:
+        if (
+            isinstance(node.ctx, ast.Load)
+            and isinstance(node.value, ast.Name)
+            and node.value.id in self.attribute_base_names
+            and node.attr in self.local_names
+        ):
+            self.references.add(
+                NameReference(
+                    name=node.attr,
+                    lineno=node.lineno,
+                    col_offset=node.col_offset,
+                )
+            )
+
+        self.generic_visit(node)
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
         self._visit_function_signature(node)
@@ -61,16 +94,6 @@ class NameReferenceCollector(ast.NodeVisitor):
             self.visit(base)
         for keyword in node.keywords:
             self.visit(keyword)
-
-    def _visit_function_signature(
-        self,
-        node: ast.FunctionDef | ast.AsyncFunctionDef,
-    ) -> None:
-        for decorator in node.decorator_list:
-            self.visit(decorator)
-        self.visit(node.args)
-        if node.returns is not None:
-            self.visit(node.returns)
 
 
 class CallerCalleeOrderChecker:
@@ -99,65 +122,31 @@ class CallerCalleeOrderChecker:
         self.tree = tree
         self.filename = filename
 
-    def run(self) -> Generator[PluginResult, None, None]:
-        if not isinstance(self.tree, ast.Module):
-            return
-
-        yield from self._check_body(self.tree.body)
-
     def _is_allowed_definition_order(
         self,
-        caller: Definition,
-        callee: Definition,
+        containing_definition: Definition,
+        callee_definition: Definition,
     ) -> bool:
         if self.order == CallerCalleeOrder.CALLEE_BEFORE_CALLER:
-            return callee.lineno <= caller.lineno
+            return callee_definition.lineno <= containing_definition.lineno
 
-        return callee.lineno >= caller.lineno
+        return callee_definition.lineno >= containing_definition.lineno
 
-    def _check_body(
+    def _target_names(
         self,
-        body: list[ast.stmt],
-    ) -> Generator[PluginResult, None, None]:
-        definitions = self._definitions_in_body(body)
-        local_names = set(definitions)
+        target: ast.expr,
+    ) -> Generator[tuple[str, int, int], None, None]:
+        if isinstance(target, ast.Name):
+            yield target.id, target.lineno, target.col_offset
+            return
 
-        for caller in definitions.values():
-            collector = NameReferenceCollector(local_names)
-            self._visit_definition_references(caller.node, collector)
+        if isinstance(target, (ast.Tuple, ast.List)):
+            for item in target.elts:
+                yield from self._target_names(item)
+            return
 
-            for reference in sorted(collector.references):
-                if reference.name == caller.name:
-                    continue
-
-                callee = definitions[reference.name]
-                if self._is_allowed_definition_order(caller, callee):
-                    continue
-
-                relative_position = (
-                    "later"
-                    if self.order == CallerCalleeOrder.CALLEE_BEFORE_CALLER
-                    else "earlier"
-                )
-                message = (
-                    f"CCO001 `{caller.name}` references `{reference.name}`, "
-                    f"but `{reference.name}` is defined {relative_position} at "
-                    f"line {callee.lineno}"
-                )
-                yield reference.lineno, reference.col_offset, message, type(self)
-
-    def _definitions_in_body(self, body: list[ast.stmt]) -> dict[str, Definition]:
-        definitions: dict[str, Definition] = {}
-        for node in body:
-            for name, lineno, col_offset in self._definition_names(node):
-                definitions[name] = Definition(
-                    name=name,
-                    node=node,
-                    lineno=lineno,
-                    col_offset=col_offset,
-                )
-
-        return definitions
+        if isinstance(target, ast.Starred):
+            yield from self._target_names(target.value)
 
     def _definition_names(
         self,
@@ -189,21 +178,44 @@ class CallerCalleeOrderChecker:
                 name = alias.asname or alias.name
                 yield name, node.lineno, node.col_offset
 
-    def _target_names(
+    def _definitions_in_body(self, body: list[ast.stmt]) -> dict[str, Definition]:
+        definitions: dict[str, Definition] = {}
+        for node in body:
+            for name, lineno, col_offset in self._definition_names(node):
+                definitions[name] = Definition(
+                    name=name,
+                    node=node,
+                    lineno=lineno,
+                    col_offset=col_offset,
+                )
+
+        return definitions
+
+    def _method_receiver_names(self, node: ast.stmt) -> set[str]:
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            return set()
+
+        names = {"self", "cls"}
+        if node.args.args:
+            names.add(node.args.args[0].arg)
+
+        return names
+
+    def _method_definitions_in_body(
         self,
-        target: ast.expr,
-    ) -> Generator[tuple[str, int, int], None, None]:
-        if isinstance(target, ast.Name):
-            yield target.id, target.lineno, target.col_offset
-            return
+        body: list[ast.stmt],
+    ) -> dict[str, Definition]:
+        definitions: dict[str, Definition] = {}
+        for node in body:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                definitions[node.name] = Definition(
+                    name=node.name,
+                    node=node,
+                    lineno=node.lineno,
+                    col_offset=node.col_offset,
+                )
 
-        if isinstance(target, (ast.Tuple, ast.List)):
-            for item in target.elts:
-                yield from self._target_names(item)
-            return
-
-        if isinstance(target, ast.Starred):
-            yield from self._target_names(target.value)
+        return definitions
 
     def _visit_definition_references(
         self,
@@ -240,3 +252,85 @@ class CallerCalleeOrderChecker:
                 collector.visit(node.value)
 
             return
+
+    def _check_class_methods(
+        self,
+        body: list[ast.stmt],
+    ) -> Generator[PluginResult, None, None]:
+        definitions = self._method_definitions_in_body(body)
+        local_names = set(definitions)
+
+        for containing_definition in definitions.values():
+            collector = NameReferenceCollector(
+                local_names,
+                attribute_base_names=self._method_receiver_names(
+                    containing_definition.node
+                ),
+            )
+            self._visit_definition_references(containing_definition.node, collector)
+
+            for caller in sorted(collector.references):
+                if caller.name == containing_definition.name:
+                    continue
+
+                callee_definition = definitions[caller.name]
+                if self._is_allowed_definition_order(
+                    containing_definition,
+                    callee_definition,
+                ):
+                    continue
+
+                relative_position = (
+                    "later"
+                    if self.order == CallerCalleeOrder.CALLEE_BEFORE_CALLER
+                    else "earlier"
+                )
+                message = (
+                    f"CCO001 `{containing_definition.name}` references "
+                    f"`{caller.name}`, but `{caller.name}` is defined "
+                    f"{relative_position} at line {callee_definition.lineno}"
+                )
+                yield caller.lineno, caller.col_offset, message, type(self)
+
+    def _check_body(
+        self,
+        body: list[ast.stmt],
+    ) -> Generator[PluginResult, None, None]:
+        definitions = self._definitions_in_body(body)
+        local_names = set(definitions)
+
+        for containing_definition in definitions.values():
+            collector = NameReferenceCollector(local_names)
+            self._visit_definition_references(containing_definition.node, collector)
+
+            for caller in sorted(collector.references):
+                if caller.name == containing_definition.name:
+                    continue
+
+                callee_definition = definitions[caller.name]
+                if self._is_allowed_definition_order(
+                    containing_definition,
+                    callee_definition,
+                ):
+                    continue
+
+                relative_position = (
+                    "later"
+                    if self.order == CallerCalleeOrder.CALLEE_BEFORE_CALLER
+                    else "earlier"
+                )
+                message = (
+                    f"CCO001 `{containing_definition.name}` references "
+                    f"`{caller.name}`, but `{caller.name}` is defined "
+                    f"{relative_position} at line {callee_definition.lineno}"
+                )
+                yield caller.lineno, caller.col_offset, message, type(self)
+
+            if isinstance(containing_definition.node, ast.ClassDef):
+                yield from self._check_class_methods(containing_definition.node.body)
+
+    def run(self) -> Generator[PluginResult, None, None]:
+        if not isinstance(self.tree, ast.Module):
+            return
+
+        yield from self._check_body(self.tree.body)
