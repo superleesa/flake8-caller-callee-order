@@ -1,7 +1,7 @@
 # flake8-caller-callee-order
 
-This repo includes a flake8 plugin that enforces top-level caller/callee
-definition order:
+This repo includes a flake8 plugin that enforces local definition/reference
+order:
 
 ```sh
 uv run flake8 path/to/file.py
@@ -19,15 +19,26 @@ def helper():
 ```
 
 ```text
-CCO001 `main` calls `helper`, but `helper` is defined later at line 5
+CCO001 `main` references `helper`, but `helper` is defined later at line 5
 ```
 
 By default, `caller-callee-order = callee-before-caller`, and `CCO001` is
-emitted when a top-level function calls another top-level function that is
-defined later in the same file. For now it only checks simple function calls
-like `helper()`; method and attribute calls like `self.helper()` or
-`module.helper()` are ignored. It only orders top-level `def` and `async def`
-functions; variables, classes, and other declarations are not checked yet.
+emitted when a local definition references another local definition that is
+defined later in the same module scope.
+
+Supported definitions are:
+
+- `def`
+- `async def`
+- `class`
+- assignments like `name = value`
+- annotated assignments like `name: type = value`
+- imports like `import module` and `from module import name`
+
+For now it only checks simple local references like `helper()` or `CONFIG`;
+method and attribute references like `self.helper()` or `module.helper()` are
+ignored. Definitions inside class bodies or function bodies are not ordered
+yet.
 
 To require callers before their callees instead, configure Flake8 with:
 

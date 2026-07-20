@@ -1,7 +1,7 @@
 [project]
 name = "flake8-caller-callee-order"
 version = "0.1.1"
-description = "Flake8 plugin that checks top-level caller/callee definition order"
+description = "Flake8 plugin that checks local definition/reference order"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
