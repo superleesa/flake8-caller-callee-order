@@ -9,6 +9,8 @@ order:
 pip install flake8-caller-callee-order
 ```
 
+## Usage
+
 ```sh
 uv run flake8 path/to/file.py
 ```
