@@ -24,7 +24,9 @@ CCO001 `main` references `helper`, but `helper` is defined later at line 5
 
 By default, `caller-callee-order = callee-before-caller`, and `CCO001` is
 emitted when a local definition references another local definition that is
-defined later in the same module scope.
+defined later in the same module scope. It also checks method references within
+class scopes by method name, and it recursively checks nested definitions inside
+functions and classes.
 
 Supported definitions are:
 
@@ -35,10 +37,24 @@ Supported definitions are:
 - annotated assignments like `name: type = value`
 - imports like `import module` and `from module import name`
 
-For now it only checks simple local references like `helper()` or `CONFIG`;
-method and attribute references like `self.helper()` or `module.helper()` are
-ignored. Definitions inside class bodies or function bodies are not ordered
-yet.
+For now it checks simple local references like `helper()` or `CONFIG`, plus
+method references like `self.helper()` and `cls.helper()` inside classes.
+Attribute bases are still checked when they are local definitions, so
+`Service.make()` can report a later-defined `Service`, but arbitrary attribute
+resolution such as `module.helper` is not resolved to imported module members.
+Class attributes are not ordered yet.
+
+Nested function scopes check nested `def`, `async def`, and `class`
+definitions. Local bindings such as arguments, assignments, imports, loop
+targets, context-manager targets, exception names, walrus targets, and augmented
+assignment targets are treated as local names so they do not produce false
+positives against outer definitions.
+
+Lambdas and comprehensions are skipped conservatively until their binding scopes
+are modeled.
+
+See [DESIGN.md](DESIGN.md) for the resolver design and intentionally deferred
+edge cases.
 
 To require callers before their callees instead, configure Flake8 with:
 

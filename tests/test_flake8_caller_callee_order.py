@@ -241,12 +241,135 @@ class Config:
     assert results == []
 
 
-def test_checker_allows_class_method_references_to_later_class_members() -> None:
+def test_checker_reports_later_defined_class_method_reference() -> None:
     results = run_checker(
         """
 class Service:
     def run(self):
+        self.helper()
+
+    def helper(self):
+        pass
+"""
+    )
+
+    assert results == [
+        (
+            4,
+            8,
+            (
+                "CCO001 `run` references `helper`, but `helper` is "
+                "defined later at line 6"
+            ),
+            CallerCalleeOrderChecker,
+        )
+    ]
+
+
+def test_checker_reports_later_defined_class_method_reference_from_cls() -> None:
+    results = run_checker(
+        """
+class Service:
+    @classmethod
+    def run(cls):
+        cls.helper()
+
+    @classmethod
+    def helper(cls):
+        pass
+"""
+    )
+
+    assert results == [
+        (
+            5,
+            8,
+            (
+                "CCO001 `run` references `helper`, but `helper` is "
+                "defined later at line 8"
+            ),
+            CallerCalleeOrderChecker,
+        )
+    ]
+
+
+def test_checker_reports_class_method_reference_inside_nested_function() -> None:
+    results = run_checker(
+        """
+class Service:
+    def run(self):
+        def inner():
+            self.helper()
+
+    def helper(self):
+        pass
+"""
+    )
+
+    assert results == [
+        (
+            5,
+            12,
+            (
+                "CCO001 `inner` references `helper`, but `helper` is "
+                "defined later at line 7"
+            ),
+            CallerCalleeOrderChecker,
+        )
+    ]
+
+
+def test_checker_reports_class_method_reference_inside_nested_class() -> None:
+    results = run_checker(
+        """
+class Service:
+    def run(self):
+        class Inner:
+            value = self.helper()
+
+    def helper(self):
+        pass
+"""
+    )
+
+    assert results == [
+        (
+            5,
+            20,
+            (
+                "CCO001 `Inner` references `helper`, but `helper` is "
+                "defined later at line 7"
+            ),
+            CallerCalleeOrderChecker,
+        )
+    ]
+
+
+def test_checker_allows_inner_namespace_name_matching_later_definition() -> None:
+    results = run_checker(
+        """
+def main():
+    def inner():
+        helper = lambda: None
         helper()
+
+
+def helper():
+    pass
+"""
+    )
+
+    assert results == []
+
+
+def test_checker_allows_inner_namespace_name_matching_later_method() -> None:
+    results = run_checker(
+        """
+class Service:
+    def run(self):
+        def inner():
+            helper = lambda: None
+            helper()
 
     def helper(self):
         pass
@@ -254,3 +377,320 @@ class Service:
     )
 
     assert results == []
+
+
+def test_checker_allows_inner_namespace_method_receiver() -> None:
+    results = run_checker(
+        """
+class Service:
+    def run(self):
+        def inner(self):
+            self.helper()
+
+    def helper(self):
+        pass
+"""
+    )
+
+    assert results == []
+
+
+def test_checker_reports_later_defined_attribute_base_reference() -> None:
+    results = run_checker(
+        """
+def main():
+    return Service.make()
+
+
+class Service:
+    pass
+"""
+    )
+
+    assert results == [
+        (
+            3,
+            11,
+            "CCO001 `main` references `Service`, but `Service` is defined later at line 6",
+            CallerCalleeOrderChecker,
+        )
+    ]
+
+
+def test_checker_reports_nested_function_reference_under_if() -> None:
+    results = run_checker(
+        """
+def main():
+    if enabled:
+        def inner():
+            helper()
+
+
+def helper():
+    pass
+"""
+    )
+
+    assert results == [
+        (
+            5,
+            12,
+            "CCO001 `inner` references `helper`, but `helper` is defined later at line 8",
+            CallerCalleeOrderChecker,
+        )
+    ]
+
+
+def test_checker_reports_nested_class_reference_inside_function() -> None:
+    results = run_checker(
+        """
+def main():
+    def inner():
+        return Local()
+
+    class Local:
+        pass
+"""
+    )
+
+    assert results == [
+        (
+            4,
+            15,
+            (
+                "CCO001 `inner` references `Local`, but `Local` is "
+                "defined later at line 6"
+            ),
+            CallerCalleeOrderChecker,
+        )
+    ]
+
+
+def test_checker_allows_loop_target_matching_later_definition() -> None:
+    results = run_checker(
+        """
+def main():
+    for helper in helpers:
+        helper()
+
+
+def helper():
+    pass
+"""
+    )
+
+    assert results == []
+
+
+def test_checker_allows_with_target_matching_later_definition() -> None:
+    results = run_checker(
+        """
+def main():
+    with manager() as helper:
+        helper()
+
+
+def helper():
+    pass
+"""
+    )
+
+    assert results == []
+
+
+def test_checker_allows_except_target_matching_later_definition() -> None:
+    results = run_checker(
+        """
+def main():
+    try:
+        risky()
+    except Exception as helper:
+        helper()
+
+
+def helper():
+    pass
+"""
+    )
+
+    assert results == []
+
+
+def test_checker_allows_named_expr_matching_later_definition() -> None:
+    results = run_checker(
+        """
+def main():
+    if helper := get_helper():
+        helper()
+
+
+def helper():
+    pass
+"""
+    )
+
+    assert results == []
+
+
+def test_checker_allows_augassign_target_matching_later_definition() -> None:
+    results = run_checker(
+        """
+def main():
+    helper += 1
+    return helper
+
+
+def helper():
+    pass
+"""
+    )
+
+    assert results == []
+
+
+def test_checker_allows_lambda_argument_matching_later_definition() -> None:
+    results = run_checker(
+        """
+def main():
+    return lambda helper: helper()
+
+
+def helper():
+    pass
+"""
+    )
+
+    assert results == []
+
+
+def test_checker_allows_comprehension_target_matching_later_definition() -> None:
+    results = run_checker(
+        """
+def main():
+    return [helper() for helper in helpers]
+
+
+def helper():
+    pass
+"""
+    )
+
+    assert results == []
+
+
+def test_checker_reports_same_named_method_reference_to_module_definition() -> None:
+    results = run_checker(
+        """
+class Service:
+    def helper(self):
+        helper()
+
+
+def helper():
+    pass
+"""
+    )
+
+    assert results == [
+        (
+            4,
+            8,
+            "CCO001 `helper` references `helper`, but `helper` is defined later at line 7",
+            CallerCalleeOrderChecker,
+        )
+    ]
+
+
+def test_checker_reports_later_defined_class_method_reference_from_custom_receiver() -> (
+    None
+):
+    results = run_checker(
+        """
+class Service:
+    def run(instance):
+        instance.helper()
+
+    def helper(self):
+        pass
+"""
+    )
+
+    assert results == [
+        (
+            4,
+            8,
+            (
+                "CCO001 `run` references `helper`, but `helper` is "
+                "defined later at line 6"
+            ),
+            CallerCalleeOrderChecker,
+        )
+    ]
+
+
+def test_checker_reports_later_defined_class_method_reference_from_posonly_receiver() -> (
+    None
+):
+    results = run_checker(
+        """
+class Service:
+    def run(instance, /):
+        instance.helper()
+
+    def helper(self):
+        pass
+"""
+    )
+
+    assert results == [
+        (
+            4,
+            8,
+            (
+                "CCO001 `run` references `helper`, but `helper` is "
+                "defined later at line 6"
+            ),
+            CallerCalleeOrderChecker,
+        )
+    ]
+
+
+def test_checker_allows_staticmethod_reference_to_later_method() -> None:
+    results = run_checker(
+        """
+class Service:
+    @staticmethod
+    def run(instance):
+        instance.helper()
+
+    def helper(self):
+        pass
+"""
+    )
+
+    assert results == []
+
+
+def test_checker_reports_class_body_reference_to_later_global() -> None:
+    results = run_checker(
+        """
+class Config:
+    value = DEFAULT
+    DEFAULT = 1
+
+
+DEFAULT = 2
+"""
+    )
+
+    assert results == [
+        (
+            3,
+            12,
+            (
+                "CCO001 `Config` references `DEFAULT`, but `DEFAULT` is "
+                "defined later at line 7"
+            ),
+            CallerCalleeOrderChecker,
+        )
+    ]
