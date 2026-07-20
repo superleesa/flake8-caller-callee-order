@@ -3,6 +3,21 @@
 This checker is intentionally a small AST-based resolver, not a complete Python
 name-resolution engine.
 
+## Code Layout
+
+The flake8 entry point is intentionally thin. `plugin.py` owns option parsing
+and flake8 result formatting, while `checker.py` owns the recursive ordering
+walk and emits checker-native violations.
+
+The checker delegates local policies to smaller modules:
+
+- `definitions.py` discovers names that can participate in ordering.
+- `collectors.py` contains AST visitors for shallow references and local
+  shadowing bindings.
+- `frames.py` builds scope frames, including method receiver bindings.
+- `resolver.py` resolves references through a stack of scope frames.
+- `diagnostics.py` formats `CCO001` messages.
+
 ## Core Model
 
 The checker separates three concepts:
