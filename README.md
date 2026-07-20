@@ -3,6 +3,12 @@
 This repo includes a flake8 plugin that enforces local definition/reference
 order:
 
+## Installation
+
+```sh
+pip install flake8-caller-callee-order
+```
+
 ```sh
 uv run flake8 path/to/file.py
 ```
