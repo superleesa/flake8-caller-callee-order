@@ -17,7 +17,7 @@ PluginResult = tuple[
 
 class CallerCalleeOrderChecker:
     name = "flake8-caller-callee-order"
-    version = "0.1.1"
+    version = "0.2.0"
     order = CallerCalleeOrder.CALLEE_BEFORE_CALLER
 
     @classmethod
