@@ -3,7 +3,11 @@ from __future__ import annotations
 import ast
 
 from .collectors import binding_names_in_body
-from .definitions import argument_names, definitions_for_body, method_definitions_in_body
+from .definitions import (
+    argument_names,
+    definitions_for_body,
+    method_definitions_in_body,
+)
 from .models import (
     Binding,
     BindingKind,
@@ -88,8 +92,7 @@ class ScopeFrameBuilder:
         method_namespace: dict[str, Definition] | None = None,
     ) -> ResolutionContext:
         extra_bindings = {
-            name: Binding(kind=BindingKind.SHADOW)
-            for name in argument_names(node.args)
+            name: Binding(kind=BindingKind.SHADOW) for name in argument_names(node.args)
         }
         receiver_binding = self.receiver_binding(node, method_namespace)
         if receiver_binding is not None:
