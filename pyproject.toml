@@ -21,7 +21,7 @@ requires = ["hatchling>=1.27.0"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-only-include = ["flake8_caller_callee_order.py"]
+packages = ["flake8_caller_callee_order"]
 
 [project.entry-points."flake8.extension"]
 CCO = "flake8_caller_callee_order:CallerCalleeOrderChecker"
@@ -41,4 +41,4 @@ caller-callee-order = "callee-before-caller"
 
 [tool.mypy]
 python_version = "3.12"
-files = ["flake8_caller_callee_order.py", "tests"]
+files = ["flake8_caller_callee_order", "tests"]
