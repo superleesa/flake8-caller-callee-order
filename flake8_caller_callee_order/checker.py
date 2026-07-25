@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import re
 from typing import Generator
 
 from .collectors import ShallowReferenceCollector
@@ -28,13 +29,21 @@ class OrderChecker:
         tree: ast.AST,
         order: CallerCalleeOrder,
         *,
+        ignore_definition_patterns: tuple[re.Pattern[str], ...] = (),
         frame_builder: ScopeFrameBuilder | None = None,
         resolver: ReferenceResolver | None = None,
     ) -> None:
         self.tree = tree
         self.order = order
+        self.ignore_definition_patterns = ignore_definition_patterns
         self.frame_builder = frame_builder or ScopeFrameBuilder()
         self.resolver = resolver or ReferenceResolver()
+
+    def _is_ignored_definition(self, definition: Definition) -> bool:
+        return any(
+            pattern.search(definition.name)
+            for pattern in self.ignore_definition_patterns
+        )
 
     def _shallow_references_in_node(self, node: ast.AST) -> list[Reference]:
         collector = ShallowReferenceCollector()
@@ -51,6 +60,7 @@ class OrderChecker:
         if (
             callee_definition is None
             or callee_definition.node is containing_definition.node
+            or self._is_ignored_definition(containing_definition)
         ):
             return
 

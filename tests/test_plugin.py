@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -48,10 +49,12 @@ def run_checker(
     source: str,
     *,
     order: CallerCalleeOrder = CallerCalleeOrder.CALLEE_BEFORE_CALLER,
+    ignore_definition_patterns: tuple[re.Pattern[str], ...] = (),
 ) -> list[tuple[int, int, str, type[CallerCalleeOrderChecker]]]:
     tree = ast.parse(source)
     checker = CallerCalleeOrderChecker(tree)
     checker.order = order
+    checker.ignore_definition_patterns = ignore_definition_patterns
     return list(checker.run())
 
 
@@ -264,6 +267,81 @@ class Service:
             CallerCalleeOrderChecker,
         )
     ]
+
+
+def test_checker_ignores_references_from_matching_definition_names() -> None:
+    results = run_checker(
+        """
+class Service:
+    def __init__(self):
+        self.setup()
+
+    def setup(self):
+        pass
+
+    def run(self):
+        self.teardown()
+
+    def teardown(self):
+        pass
+""",
+        ignore_definition_patterns=(re.compile(r"^__init__$"),),
+    )
+
+    assert results == [
+        (
+            10,
+            8,
+            (
+                "CCO001 `run` references `teardown`, but `teardown` is "
+                "defined later at line 12"
+            ),
+            CallerCalleeOrderChecker,
+        )
+    ]
+
+
+def test_ignore_definition_patterns_can_be_configured(tmp_path: Path) -> None:
+    fixture = tmp_path / "service.py"
+    fixture.write_text(
+        """
+class Service:
+    def __init__(self):
+        self.setup()
+
+    def setup(self):
+        pass
+""",
+        encoding="utf-8",
+    )
+    config = tmp_path / ".flake8"
+    config.write_text(
+        """
+[flake8]
+select = CCO
+caller-callee-order-ignore-definitions = ^__init__$
+""",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "flake8",
+            "--config",
+            str(config),
+            str(fixture),
+        ],
+        cwd=tmp_path,
+        check=False,
+        text=True,
+        capture_output=True,
+    )
+
+    assert result.returncode == 0
+    assert result.stdout == ""
+    assert result.stderr == ""
 
 
 def test_checker_reports_later_defined_class_method_reference_from_cls() -> None:

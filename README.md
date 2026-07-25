@@ -71,6 +71,18 @@ To require callers before their callees instead, configure Flake8 with:
 caller-callee-order = caller-before-callee
 ```
 
+To ignore order checks for definitions whose names match a regular expression,
+configure `caller-callee-order-ignore-definitions` with one or more
+comma-separated patterns:
+
+```ini
+[flake8]
+caller-callee-order-ignore-definitions = ^__init__$
+```
+
+With that configuration, `__init__` can stay at the top of a class and call
+later methods without emitting `CCO001`; other methods are still checked.
+
 ## Development
 
 ```sh
